@@ -20,11 +20,15 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
   const { toast } = useToast();
 
   const startCamera = async () => {
+    console.log('Starting camera access...');
     try {
       // Check if mediaDevices is supported
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('Camera API not supported');
         throw new Error('Camera access is not supported in this browser');
       }
+
+      console.log('Requesting camera access...');
 
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
@@ -34,15 +38,19 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
         },
         audio: false // Only request video for sign detection
       });
+      console.log('Camera access granted, setting up video...');
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        console.log('Video stream attached to video element');
         // Ensure video plays
         await videoRef.current.play();
+        console.log('Video is now playing');
       }
       
       setStream(mediaStream);
       setIsDetecting(true);
+      console.log('Camera state updated - isDetecting: true');
       
       // Simulate sign detection (in real implementation, this would use MediaPipe/TensorFlow)
       simulateSignDetection();
@@ -86,17 +94,24 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
   };
 
   const stopCamera = () => {
+    console.log('Stopping camera...');
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      stream.getTracks().forEach(track => {
+        console.log('Stopping track:', track.kind);
+        track.stop();
+      });
       setStream(null);
     }
     
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      console.log('Video element cleared');
     }
     
     setIsDetecting(false);
     setDetectedSign('');
+    setShowPermissionGuide(false);
+    console.log('Camera state reset - isDetecting: false');
   };
 
   const simulateSignDetection = () => {
@@ -226,6 +241,13 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
                   Last detected: "{lastDetection}"
                 </p>
               )}
+              
+              {/* Debug info */}
+              <div className="text-xs text-muted-foreground bg-muted p-2 rounded mt-2">
+                <p>Debug: isDetecting={isDetecting.toString()}</p>
+                <p>Stream: {stream ? 'Active' : 'None'}</p>
+                <p>Video element: {videoRef.current ? 'Ready' : 'Not ready'}</p>
+              </div>
             </div>
           </div>
         </div>
