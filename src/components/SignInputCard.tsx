@@ -1,0 +1,195 @@
+import { useState, useRef, useEffect } from 'react';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Camera, CameraOff, Hand, RotateCcw } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+
+interface SignInputCardProps {
+  onSignDetected: (text: string) => void;
+  isDetecting: boolean;
+  setIsDetecting: (detecting: boolean) => void;
+}
+
+export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: SignInputCardProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [detectedSign, setDetectedSign] = useState('');
+  const [lastDetection, setLastDetection] = useState('');
+  const { toast } = useToast();
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: 'user' }
+      });
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+      
+      setStream(mediaStream);
+      setIsDetecting(true);
+      
+      // Simulate sign detection (in real implementation, this would use MediaPipe/TensorFlow)
+      simulateSignDetection();
+      
+      toast({
+        title: "Camera Started",
+        description: "Ready to detect sign language gestures"
+      });
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      toast({
+        title: "Camera Access Error",
+        description: "Please allow camera access to detect signs",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    
+    setIsDetecting(false);
+    setDetectedSign('');
+  };
+
+  const simulateSignDetection = () => {
+    // Simulated sign detection - in real implementation, this would integrate with MediaPipe Hands
+    const signs = [
+      'Hello', 'Thank you', 'Please', 'Sorry', 'Good morning',
+      'How are you?', 'I am fine', 'Nice to meet you', 'Goodbye', 'Yes', 'No'
+    ];
+    
+    const interval = setInterval(() => {
+      if (!isDetecting) {
+        clearInterval(interval);
+        return;
+      }
+      
+      // Randomly detect a sign every 3-5 seconds
+      if (Math.random() > 0.7) {
+        const randomSign = signs[Math.floor(Math.random() * signs.length)];
+        setDetectedSign(randomSign);
+        setLastDetection(randomSign);
+        onSignDetected(randomSign);
+        
+        // Clear detection after 2 seconds
+        setTimeout(() => setDetectedSign(''), 2000);
+      }
+    }, 1000);
+  };
+
+  const replayLastDetection = () => {
+    if (lastDetection) {
+      onSignDetected(lastDetection);
+      toast({
+        title: "Replaying",
+        description: `"${lastDetection}"`
+      });
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [stream]);
+
+  return (
+    <Card className="p-6 bg-gradient-card shadow-card hover:shadow-elevated transition-all duration-300">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Hand className="h-6 w-6 text-secondary" />
+            <h3 className="text-lg font-semibold text-foreground">Sign Language Input</h3>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={replayLastDetection}
+              disabled={!lastDetection}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
+            {isDetecting ? (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover scale-x-[-1]"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <div className="text-center">
+                  <Camera className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Camera not active</p>
+                </div>
+              </div>
+            )}
+            
+            {detectedSign && (
+              <div className="absolute top-4 left-4 bg-secondary text-secondary-foreground px-3 py-2 rounded-lg shadow-elevated animate-pulse">
+                <p className="font-medium">Detected: {detectedSign}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-center">
+            <Button
+              onClick={isDetecting ? stopCamera : startCamera}
+              size="lg"
+              className={`h-12 px-8 transition-all duration-300 ${
+                isDetecting
+                  ? 'bg-destructive hover:bg-destructive/90'
+                  : 'bg-gradient-secondary hover:shadow-glow'
+              }`}
+            >
+              {isDetecting ? (
+                <>
+                  <CameraOff className="h-5 w-5 mr-2" />
+                  Stop Detection
+                </>
+              ) : (
+                <>
+                  <Camera className="h-5 w-5 mr-2" />
+                  Start Detection
+                </>
+              )}
+            </Button>
+          </div>
+
+          <div className="text-center space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {isDetecting 
+                ? 'Perform sign language gestures naturally' 
+                : 'Click to start sign language detection'
+              }
+            </p>
+            {lastDetection && (
+              <p className="text-xs text-muted-foreground">
+                Last detected: "{lastDetection}"
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
