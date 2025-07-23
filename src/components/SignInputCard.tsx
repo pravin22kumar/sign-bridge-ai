@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Camera, CameraOff, Hand, RotateCcw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { PermissionGuide } from './PermissionGuide';
 
 interface SignInputCardProps {
   onSignDetected: (text: string) => void;
@@ -15,16 +16,29 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [detectedSign, setDetectedSign] = useState('');
   const [lastDetection, setLastDetection] = useState('');
+  const [showPermissionGuide, setShowPermissionGuide] = useState(false);
   const { toast } = useToast();
 
   const startCamera = async () => {
     try {
+      // Check if mediaDevices is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera access is not supported in this browser');
+      }
+
       const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 640, height: 480, facingMode: 'user' }
+        video: { 
+          width: { ideal: 640 }, 
+          height: { ideal: 480 }, 
+          facingMode: 'user' 
+        },
+        audio: false // Only request video for sign detection
       });
       
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Ensure video plays
+        await videoRef.current.play();
       }
       
       setStream(mediaStream);
@@ -34,17 +48,41 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
       simulateSignDetection();
       
       toast({
-        title: "Camera Started",
+        title: "Camera Started Successfully",
         description: "Ready to detect sign language gestures"
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error accessing camera:', error);
+      
+      let errorMessage = "Unknown camera error";
+      let errorTitle = "Camera Access Error";
+      
+      if (error.name === 'NotAllowedError' || error.message.includes('not-allowed')) {
+        errorTitle = "Camera Permission Denied";
+        errorMessage = "Please allow camera access in your browser settings and refresh the page";
+        setShowPermissionGuide(true);
+      } else if (error.name === 'NotFoundError') {
+        errorTitle = "No Camera Found";
+        errorMessage = "No camera device was found on your system";
+      } else if (error.name === 'NotReadableError') {
+        errorTitle = "Camera In Use";
+        errorMessage = "Camera is already being used by another application";
+      } else if (error.message.includes('not supported')) {
+        errorTitle = "Browser Not Supported";
+        errorMessage = "Your browser doesn't support camera access";
+      }
+      
       toast({
-        title: "Camera Access Error",
-        description: "Please allow camera access to detect signs",
+        title: errorTitle,
+        description: errorMessage,
         variant: "destructive"
       });
     }
+  };
+
+  const retryCamera = () => {
+    setShowPermissionGuide(false);
+    startCamera();
   };
 
   const stopCamera = () => {
@@ -106,90 +144,96 @@ export function SignInputCard({ onSignDetected, isDetecting, setIsDetecting }: S
   }, [stream]);
 
   return (
-    <Card className="p-6 bg-gradient-card shadow-card hover:shadow-elevated transition-all duration-300">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Hand className="h-6 w-6 text-secondary" />
-            <h3 className="text-lg font-semibold text-foreground">Sign Language Input</h3>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={replayLastDetection}
-              disabled={!lastDetection}
-            >
-              <RotateCcw className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
+    <>
+      <Card className="p-6 bg-gradient-card shadow-card hover:shadow-elevated transition-all duration-300">
         <div className="space-y-4">
-          <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
-            {isDetecting ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover scale-x-[-1]"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="text-center">
-                  <Camera className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Camera not active</p>
-                </div>
-              </div>
-            )}
-            
-            {detectedSign && (
-              <div className="absolute top-4 left-4 bg-secondary text-secondary-foreground px-3 py-2 rounded-lg shadow-elevated animate-pulse">
-                <p className="font-medium">Detected: {detectedSign}</p>
-              </div>
-            )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Hand className="h-6 w-6 text-secondary" />
+              <h3 className="text-lg font-semibold text-foreground">Sign Language Input</h3>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={replayLastDetection}
+                disabled={!lastDetection}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
 
-          <div className="flex justify-center">
-            <Button
-              onClick={isDetecting ? stopCamera : startCamera}
-              size="lg"
-              className={`h-12 px-8 transition-all duration-300 ${
-                isDetecting
-                  ? 'bg-destructive hover:bg-destructive/90'
-                  : 'bg-gradient-secondary hover:shadow-glow'
-              }`}
-            >
+          <div className="space-y-4">
+            <div className="relative aspect-video bg-muted rounded-lg overflow-hidden">
               {isDetecting ? (
-                <>
-                  <CameraOff className="h-5 w-5 mr-2" />
-                  Stop Detection
-                </>
+                <video
+                  ref={videoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover scale-x-[-1]"
+                />
               ) : (
-                <>
-                  <Camera className="h-5 w-5 mr-2" />
-                  Start Detection
-                </>
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <Camera className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Camera not active</p>
+                  </div>
+                </div>
               )}
-            </Button>
-          </div>
+              
+              {detectedSign && (
+                <div className="absolute top-4 left-4 bg-secondary text-secondary-foreground px-3 py-2 rounded-lg shadow-elevated animate-pulse">
+                  <p className="font-medium">Detected: {detectedSign}</p>
+                </div>
+              )}
+            </div>
 
-          <div className="text-center space-y-2">
-            <p className="text-sm text-muted-foreground">
-              {isDetecting 
-                ? 'Perform sign language gestures naturally' 
-                : 'Click to start sign language detection'
-              }
-            </p>
-            {lastDetection && (
-              <p className="text-xs text-muted-foreground">
-                Last detected: "{lastDetection}"
+            <div className="flex justify-center">
+              <Button
+                onClick={isDetecting ? stopCamera : startCamera}
+                size="lg"
+                className={`h-12 px-8 transition-all duration-300 ${
+                  isDetecting
+                    ? 'bg-destructive hover:bg-destructive/90'
+                    : 'bg-gradient-secondary hover:shadow-glow'
+                }`}
+              >
+                {isDetecting ? (
+                  <>
+                    <CameraOff className="h-5 w-5 mr-2" />
+                    Stop Detection
+                  </>
+                ) : (
+                  <>
+                    <Camera className="h-5 w-5 mr-2" />
+                    Start Detection
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {isDetecting 
+                  ? 'Perform sign language gestures naturally' 
+                  : 'Click to start sign language detection'
+                }
               </p>
-            )}
+              {lastDetection && (
+                <p className="text-xs text-muted-foreground">
+                  Last detected: "{lastDetection}"
+                </p>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+      
+      {showPermissionGuide && (
+        <PermissionGuide onRetry={retryCamera} />
+      )}
+    </>
   );
 }
